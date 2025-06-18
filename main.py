@@ -3,13 +3,18 @@ import time
 import json
 import os
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+
 TOKEN = "7356961896:AAE6VukMLQ50odCEfzJJ2zaSM3laK0eKW9A"
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}/"
 REFERRAL_FILE = "referrals.json"
 BALANCE_FILE = "balances.json"
 MIN_WITHDRAW = 100
+MIN_REFERRALS = 20
 REWARD_PER_REF = 5
+ADMIN_ID = 123456789  # Replace with your Telegram user ID
 
+# --- JSON File Handling ---
 def load_json(filename):
     if os.path.exists(filename):
         with open(filename, "r") as f:
@@ -20,120 +25,115 @@ def save_json(filename, data):
     with open(filename, "w") as f:
         json.dump(data, f)
 
-def send_message(chat_id, text):
-    url = BASE_URL + "sendMessage"
-    params = {"chat_id": chat_id, "text": text}
-    requests.get(url, params=params)
+# --- Command Handlers ---
+def start(update, context):
+    user = update.message.from_user
+    user_id = str(user.id)
+    referrals = load_json(REFERRAL_FILE)
+    balances = load_json(BALANCE_FILE)
 
-def get_updates(offset=None):
-    url = BASE_URL + "getUpdates"
-    params = {"timeout": 30, "offset": offset}
-    resp = requests.get(url, params=params).json()
-    return resp.get("result", [])
+    args = context.args
+    if args:
+        referrer_id = args[0]
+        if referrer_id != user_id:
+            if referrer_id not in referrals:
+                referrals[referrer_id] = []
+            if user_id not in referrals[referrer_id]:
+                referrals[referrer_id].append(user_id)
+                balances[referrer_id] = balances.get(referrer_id, 0) + REWARD_PER_REF
+                save_json(REFERRAL_FILE, referrals)
+                save_json(BALANCE_FILE, balances)
 
-def handle_update(update, referrals, balances):
-    message = update.get("message")
-    if not message:
-        return
+    total_refs = len(referrals.get(user_id, []))
+    ref_link = f"https://t.me/GlobalBusinessIntBot?start={user_id}"
 
-    chat_id = message["chat"]["id"]
-    user_id = str(chat_id)
-    text = message.get("text", "")
+    keyboard = [
+        [InlineKeyboardButton("🛍 Products", callback_data='products'), InlineKeyboardButton("🌐 Social", callback_data='social')],
+        [InlineKeyboardButton("🎁 Offer & Reference", callback_data='offer'), InlineKeyboardButton("🏢 Office", callback_data='office')],
+        [InlineKeyboardButton("💡 Help", callback_data='help')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if text.startswith("/start"):
-        parts = text.split()
-        if len(parts) > 1:
-            referrer_id = parts[1]
-            if referrer_id != user_id:
-                if referrer_id not in referrals:
-                    referrals[referrer_id] = []
-                if user_id not in referrals[referrer_id]:
-                    referrals[referrer_id].append(user_id)
-                    balances[referrer_id] = balances.get(referrer_id, 0) + REWARD_PER_REF
-                    save_json(REFERRAL_FILE, referrals)
-                    save_json(BALANCE_FILE, balances)
+    welcome_text = (
+        "👋 Welcome to Global Business Bot 💹\n\n"
+        "📌 Start your international business journey for FREE!\n"
+        "🧾 Create a DXN/Excellent account and earn by referrals.\n"
+        "💸 Earn ৳5 per referral. Withdraw when you reach ৳100 from 20 referrals.\n\n"
+        f"🔗 Your Referral Link: {ref_link}\n"
+        f"👥 Total Referrals: {total_refs}\n\n"
+        "🔧 Need help? Contact: @mdtarekazizfun"
+    )
+    update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
-        send_message(chat_id,
-            "🌟 Welcome to Global Business Bot!\n\n"
-            "📌 DXN Business – One World One Market\n"
-            "Want to open an account or learn business?\n"
-            "🔗 https://eworld.dxn2u.com/s/accreg/en/827221982\n\n"
-            "📝 Required Documents:\n"
-            "1️⃣ National ID (Front & Back) or Passport (info page)\n"
-            "2️⃣ Valid Email Address\n"
-            "3️⃣ Active Mobile Number\n\n"
-            "🔧 Need help? Contact Account Opener:\n"
-            "👉 t.me/mdtarekazizfun\n\n"
-            "👉 Use /Products to view our items\n"
-            "👉 Use /Social to follow us online\n"
-            "👉 Use /OfferAndReference for earnings & referral\n"
-            "👉 Use /Office to get DXN info\n"
-            "👉 Use /Help for assistance")
+def button_handler(update, context):
+    query = update.callback_query
+    query.answer()
+    data = query.data
+    chat_id = query.message.chat.id
 
-    elif text == "/Products":
-        send_message(chat_id, "🛍️ Products:\nhttps://www.excellentworldint.com/products")
-
-    elif text == "/Social":
-        send_message(chat_id,
+    if data == 'products':
+        context.bot.send_message(chat_id, "🛍️ Products: https://www.excellentworldint.com/products")
+    elif data == 'social':
+        context.bot.send_message(chat_id,
             "🌐 Social Media Links:\n\n"
-            "📘 Facebook (Excellent): https://www.facebook.com/ExcellentWorldIntBD\n"
-            "📘 Facebook (DXN): https://www.facebook.com/DXNGlobalBusinessBD\n"
-            "📺 YouTube Channel: https://www.youtube.com/YouTubeBanglaMPTABD\n"
-            "📱 IMO Group: https://s.channelcom.tech/Oe9jLm?from=copy_link\n"
-            "📎 LinkedIn (Excellent): https://www.linkedin.com/company/excellentworldintbd/\n"
-            "📎 LinkedIn (DXN): https://www.linkedin.com/company/dxnglobelbusiness/\n"
+            "📘 Facebook (Excellent): https://facebook.com/ExcellentWorldIntBD\n"
+            "📘 Facebook (DXN): https://facebook.com/DXNGlobalBusinessBD\n"
+            "📺 YouTube: https://youtube.com/YouTubeBanglaMPTABD\n"
+            "📱 IMO: https://s.channelcom.tech/Oe9jLm\n"
+            "📎 LinkedIn (Excellent): https://linkedin.com/company/excellentworldintbd/\n"
+            "📎 LinkedIn (DXN): https://linkedin.com/company/dxnglobelbusiness/\n"
             "📢 Telegram Channel: https://t.me/excellentworldintbd\n"
             "👥 Telegram Group: https://t.me/OnlineAndOfflineEarningBD\n"
             "🔗 Facebook Group: https://facebook.com/groups/dreamrealizationbd/")
-
-    elif text == "/Office":
-        send_message(chat_id,
-            "🏢 DXN Business Office:\n\n"
-            "🔗 Account Open Link:\nhttps://eworld.dxn2u.com/s/accreg/en/827221982\n\n"
-            "📄 Required:\n1️⃣ NID or Passport\n2️⃣ Email\n3️⃣ Phone\n\n"
-            "📲 Open through: t.me/mdtarekazizfun")
-
-    elif text == "/OfferAndReference":
+    elif data == 'office':
+        context.bot.send_message(chat_id,
+            "🏢 DXN Business Office Info:\n\n"
+            "📌 DXN Business – One World One Market\n"
+            "🔗 Account Link: https://eworld.dxn2u.com/s/accreg/en/827221982\n\n"
+            "📝 Required:\n1️⃣ NID or Passport\n2️⃣ Email\n3️⃣ Phone\n\n"
+            "📲 Contact: @mdtarekazizfun")
+    elif data == 'offer':
+        user_id = str(chat_id)
+        referrals = load_json(REFERRAL_FILE)
+        balances = load_json(BALANCE_FILE)
         referred = referrals.get(user_id, [])
         count = len(referred)
         balance = balances.get(user_id, 0)
         ref_link = f"https://t.me/GlobalBusinessIntBot?start={user_id}"
 
-        withdraw_text = "❌ Minimum ৳100 required for withdrawal."
-        if balance >= MIN_WITHDRAW:
-            withdraw_text = "✅ You are eligible to request withdrawal!"
+        if count >= MIN_REFERRALS and balance >= MIN_WITHDRAW:
+            context.bot.send_message(chat_id,
+                f"🎁 Your Referral Info:\n\n"
+                f"🔗 Referral Link: {ref_link}\n👥 Total Referrals: {count}\n💰 Balance: ৳{balance}\n\n"
+                f"✅ You're eligible to withdraw.\n"
+                f"✍️ Send the following info:\n- Bkash/Nagad Number\n- Name\n- Amount\n- Note (if any)")
+        else:
+            context.bot.send_message(chat_id,
+                f"🎁 Your Referral Info:\n\n"
+                f"🔗 Referral Link: {ref_link}\n👥 Total Referrals: {count}\n💰 Balance: ৳{balance}\n\n"
+                f"❌ You need at least 20 referrals and ৳100 to request withdrawal.")
+    elif data == 'help':
+        context.bot.send_message(chat_id,
+            "💡 Help Menu:\n\n"
+            "/start – Start the bot\n"
+            "/Products – View Products\n"
+            "/Social – Social Media Links\n"
+            "/Office – DXN Info\n"
+            "/OfferAndReference – Earnings & Referrals\n"
+            "/Help – Help Message")
 
-        referred_users = "\n".join(referred) if referred else "No referrals yet."
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-        send_message(chat_id,
-            f"🎁 Offer & Reference Info\n\n"
-            f"🔗 Your Referral Link:\n{ref_link}\n\n"
-            f"👥 Total Referrals: {count}\n"
-            f"💰 Balance: ৳{balance}\n\n"
-            f"{withdraw_text}\n"
-            f"🧾 Referred Users:\n{referred_users}")
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text, lambda update, ctx: None))
+    dp.add_handler(MessageHandler(Filters.command, lambda update, ctx: None))
+    dp.add_handler(CallbackQueryHandler(button_handler))
 
-    elif text == "/Help":
-        send_message(chat_id,
-            "📖 Help Menu:\n\n"
-            "🏠 /Start – Start the bot\n"
-            "🛍️ /Products – View Products\n"
-            "🌐 /Social – Social Media Links\n"
-            "🏢 /Office – DXN Info\n"
-            "🎁 /OfferAndReference – Earnings & Referrals\n"
-            "💡 /Help – Help Message")
+    updater.start_polling()
+    updater.idle()
 
-def run_bot():
-    referrals = load_json(REFERRAL_FILE)
-    balances = load_json(BALANCE_FILE)
-    last_update = None
-    while True:
-        updates = get_updates(offset=last_update)
-        for upd in updates:
-            last_update = upd["update_id"] + 1
-            handle_update(upd, referrals, balances)
-        time.sleep(1)
-
-if __name__ == "__main__":
-    run_bot()
+if __name__ == '__main__':
+    main()
     
