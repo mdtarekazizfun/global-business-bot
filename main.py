@@ -103,13 +103,15 @@ def handle_update(update, referrals, balances):
         if balance >= MIN_WITHDRAW:
             withdraw_text = "✅ You are eligible to request withdrawal!"
 
+        referred_users = "\n".join(referred) if referred else "No referrals yet."
+
         send_message(chat_id,
             f"🎁 Offer & Reference Info\n\n"
             f"🔗 Your Referral Link:\n{ref_link}\n\n"
             f"👥 Total Referrals: {count}\n"
             f"💰 Balance: ৳{balance}\n\n"
             f"{withdraw_text}\n"
-            f"🧾 Referred Users:\n" + ("\n".join(referred) if referred else "No referrals yet."))
+            f"🧾 Referred Users:\n{referred_users}")
 
     elif text == "/Help":
         send_message(chat_id,
@@ -134,4 +136,4 @@ def run_bot():
 
 if __name__ == "__main__":
     run_bot()
-                     
+    
